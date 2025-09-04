@@ -4,16 +4,15 @@
 import os
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import SupabaseVectorStore
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import Tool, StructuredTool
 from langchain_neo4j import GraphCypherQAChain
 from langchain_neo4j import Neo4jGraph
 from langchain.prompts import PromptTemplate
+from supabase.client import Client, create_client
 
 load_dotenv()
-
-VECTOR_INDEX_PATH = "faiss_index"
 
 # --- Tool Creation Functions ---
 def create_graph_qa_tool():
@@ -28,15 +27,31 @@ def create_graph_qa_tool():
     )
 
 def create_vector_search_tool():
+    # --- START OF CHANGES ---
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise ValueError("Supabase URL or Service Key is missing. Please check your .env file.")
+
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    vector_store = FAISS.load_local(VECTOR_INDEX_PATH, embeddings, allow_dangerous_deserialization=True)
+    
+    vector_store = SupabaseVectorStore(
+        client=supabase,
+        embedding=embeddings,
+        table_name="documents",
+        query_name="match_documents"
+    )
+    # --- END OF CHANGES ---
+    
     retriever = vector_store.as_retriever()
     return Tool(
         name="General Information Search", func=retriever.invoke,
         description="Use for general, conceptual, or 'how-to' questions, and for information like operating hours and location. e.g., 'How do I prepare for a party?' or 'What are your hours?'"
     )
 
-# --- Tool Functions for Sales and Support ---
+# --- Tool Functions for Sales and Support (Unchanged) ---
 def book_gym_trial(name: str, email: str, phone: str) -> str:
     """
     Books a 7-day free gym trial. Gathers user's name, email, and phone,
@@ -69,7 +84,7 @@ def escalate_to_human(name: str, phone: str, reason: str) -> str:
     print(f"--- END ACTION ---")
     return f"Thank you, {name}. I've passed your request on to our team. Someone will call you back at {phone} as soon as possible to help with: '{reason}'. 😊"
 
-# --- Main Agent Initialization Function ---
+# --- Main Agent Initialization Function (Unchanged) ---
 def initialize_agent():
     """Creates and returns the main agent executor."""
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, convert_system_message_to_human=True)
@@ -94,7 +109,6 @@ def initialize_agent():
         )
     ]
     
-    # CORRECTED PROMPT TEMPLATE
     persona_template = """
     You are a helpful assistant for IPIC Active (a gym) and IPIC Play (a kids' play park).
     Your name is "Sparky," the friendly and energetic guide for our family hub.
@@ -141,7 +155,7 @@ def get_agent_response(agent_executor, query):
         print(f"Agent invocation error: {e}")
         return "I'm sorry, but I encountered an error while trying to process your request."
 
-# --- Main function for command-line testing ---
+# --- Main function for command-line testing (Unchanged) ---
 def main_cli():
     print("⚙️  Setting up Sparky, the Sophisticated Agent for CLI...")
     agent_executor = initialize_agent()
