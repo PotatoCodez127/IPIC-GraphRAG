@@ -1,0 +1,10 @@
+langchain
+langchain-google-genai
+langchain-community
+langchain-experimental
+langchain-neo4j
+neo4j
+python-dotenv
+tiktoken
+faiss-cpu==1.10.0
+dotenv
