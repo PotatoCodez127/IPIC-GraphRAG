@@ -30,7 +30,7 @@ def generate_knowledge_graph():
 
     # 2. Initialize the LLM and the Graph Transformer
     print("Initializing LLM and Graph Transformer...")
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0)
 
     # --- START OF IMPROVEMENTS ---p
 
