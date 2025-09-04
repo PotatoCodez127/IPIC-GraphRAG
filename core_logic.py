@@ -1,5 +1,5 @@
 #
-# -------------------- agent_chatbot.py --------------------
+# -------------------- core_logic.py --------------------
 #
 import os
 from dotenv import load_dotenv
@@ -27,7 +27,6 @@ def create_graph_qa_tool():
     )
 
 def create_vector_search_tool():
-    # --- START OF CHANGES ---
     SUPABASE_URL = os.getenv("SUPABASE_URL")
     SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
@@ -43,7 +42,6 @@ def create_vector_search_tool():
         table_name="documents",
         query_name="match_documents"
     )
-    # --- END OF CHANGES ---
     
     retriever = vector_store.as_retriever()
     return Tool(
@@ -51,7 +49,7 @@ def create_vector_search_tool():
         description="Use for general, conceptual, or 'how-to' questions, and for information like operating hours and location. e.g., 'How do I prepare for a party?' or 'What are your hours?'"
     )
 
-# --- Tool Functions for Sales and Support (Unchanged) ---
+# --- Tool Functions for Sales and Support ---
 def book_gym_trial(name: str, email: str, phone: str) -> str:
     """
     Books a 7-day free gym trial. Gathers user's name, email, and phone,
@@ -84,7 +82,7 @@ def escalate_to_human(name: str, phone: str, reason: str) -> str:
     print(f"--- END ACTION ---")
     return f"Thank you, {name}. I've passed your request on to our team. Someone will call you back at {phone} as soon as possible to help with: '{reason}'. 😊"
 
-# --- Main Agent Initialization Function (Unchanged) ---
+# --- Main Agent Initialization Function ---
 def initialize_agent():
     """Creates and returns the main agent executor."""
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, convert_system_message_to_human=True)
@@ -140,34 +138,3 @@ def initialize_agent():
     agent_prompt = PromptTemplate.from_template(persona_template)
     agent = create_react_agent(llm, tools, agent_prompt)
     return AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True, max_iterations=7)
-
-def get_agent_response(agent_executor, query):
-    """Invokes the agent and cleans the output."""
-    try:
-        response = agent_executor.invoke({"input": query})
-        raw_output = response["output"]
-        if "Final Answer:" in raw_output:
-            clean_response = raw_output.split("Final Answer:")[-1].strip()
-        else:
-            clean_response = raw_output.strip()
-        return clean_response if clean_response else "I've processed the information, but I don't have a specific answer to provide."
-    except Exception as e:
-        print(f"Agent invocation error: {e}")
-        return "I'm sorry, but I encountered an error while trying to process your request."
-
-# --- Main function for command-line testing (Unchanged) ---
-def main_cli():
-    print("⚙️  Setting up Sparky, the Sophisticated Agent for CLI...")
-    agent_executor = initialize_agent()
-    print("\n🤖 Hi, I'm Sparky! How can I help you today? ✨")
-    print("=" * 50)
-    
-    while True:
-        query = input("\nYou: ").strip()
-        if query.lower() in ["exit", "quit", "q"]:
-            break
-        response = get_agent_response(agent_executor, query)
-        print("\n🤖 Sparky:", response)
-
-if __name__ == "__main__":
-    main_cli()
