@@ -86,7 +86,7 @@ def escalate_to_human(name: str, phone: str, reason: str) -> str:
 def initialize_agent():
     """Creates and returns the main agent executor."""
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, convert_system_message_to_human=True)
-    
+
     tools = [
         create_graph_qa_tool(),
         create_vector_search_tool(),
