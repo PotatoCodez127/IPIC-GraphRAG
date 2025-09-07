@@ -9,5 +9,3 @@ tiktoken
 supabase
 fastapi
 uvicorn[standard]
-twilio
-httpx

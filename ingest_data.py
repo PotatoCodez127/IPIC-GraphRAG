@@ -1,5 +1,5 @@
 #
-# -------------------- backend/ingest_data.py --------------------
+# -------------------- ingest_data.py (v5 - Production Ready) --------------------
 #
 import os
 import re
@@ -14,11 +14,10 @@ from langchain_community.vectorstores import SupabaseVectorStore
 from supabase.client import Client, create_client
 from langchain_core.documents import Document
 
-# Load .env from the current directory
+# Load environment variables
 load_dotenv()
 
 # --- Configuration ---
-# The path is relative to this script's location in the 'backend' folder
 SOURCE_DIRECTORY_PATH = "data/"
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
@@ -41,7 +40,7 @@ def get_processed_files_from_db(supabase: Client):
         print(f"Error fetching processed files log from Supabase: {e}")
         return {}
 
-# --- Pre-processing Functions ---
+# --- Pre-processing Functions (Unchanged) ---
 def normalize_text(text):
     return re.sub(r'\s+', ' ', text).strip()
 
@@ -63,7 +62,7 @@ def production_ingestion_pipeline():
     # --- 1. Initialize Connections ---
     graph = Neo4jGraph()
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    graph_generation_llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0)
+    graph_generation_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 
     # --- 2. Check for File Changes using DB log ---
@@ -80,21 +79,22 @@ def production_ingestion_pipeline():
         print("✅ Knowledge base is already up-to-date. No changes needed.")
         return
 
-    # --- 3. Handle Deletions and Updates ---
+    # --- 3. Handle Deletions and Updates (by deleting old data first) ---
     files_requiring_deletion = files_to_delete.union(files_to_update)
     if files_requiring_deletion:
         print(f"\nStep 3: Deleting data for {len(files_requiring_deletion)} removed/updated file(s)...")
         for file_path in files_requiring_deletion:
             print(f"  - Deleting data from: {os.path.basename(file_path)}")
-            graph.query("MATCH (s:Source {uri: $source_path})-[*0..]-(n) DETACH DELETE s, n", params={"source_path": file_path})
+            graph.query("MATCH (doc:Document {source: $source_path})-[*0..]-(n) DETACH DELETE doc, n", params={"source_path": file_path})
             supabase.table("documents").delete().eq("metadata->>source", file_path).execute()
             supabase.table("ingestion_log").delete().eq("file_path", file_path).execute()
 
-    # --- 4. Handle Additions and Updates ---
+    # --- 4. Handle Additions and Updates (by processing files) ---
     files_to_process = files_to_add.union(files_to_update)
     if files_to_process:
         print(f"\nStep 4: Processing {len(files_to_process)} new/updated file(s)...")
         
+        # This section remains largely the same, just processing the subset of files
         docs_to_process = []
         for file_path in files_to_process:
             loader = TextLoader(file_path, encoding='utf-8')
@@ -105,6 +105,7 @@ def production_ingestion_pipeline():
         preprocessed_docs = [Document(page_content=normalize_text(standardize_terms(doc.page_content)), metadata=doc.metadata) for doc in docs_to_process]
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
         chunks = text_splitter.split_documents(preprocessed_docs)
+        print(f"Created {len(chunks)} document chunks from changed files.")
 
         llm_transformer = LLMGraphTransformer(
             llm=graph_generation_llm,
