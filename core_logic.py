@@ -1,5 +1,5 @@
 #
-# -------------------- core_logic.py (Complete Version) --------------------
+# -------------------- core_logic.py (v3 with Memory) --------------------
 #
 import os
 from dotenv import load_dotenv
@@ -8,87 +8,23 @@ from langchain_community.vectorstores import SupabaseVectorStore
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import Tool, StructuredTool
 from langchain_neo4j import GraphCypherQAChain, Neo4jGraph
-from langchain.prompts import PromptTemplate
+from langchain.prompts import PromptTemplate, MessagesPlaceholder
 from supabase.client import Client, create_client
 from pydantic import BaseModel, Field
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferMemory # <-- IMPORT THIS
 
 load_dotenv()
 
-# --- Tool Creation Functions ---
-def create_graph_qa_tool():
-    graph = Neo4jGraph()
-    chain = GraphCypherQAChain.from_llm(
-        ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0),
-        graph=graph, verbose=False, allow_dangerous_requests=True
-    )
-    return Tool(
-        name="Knowledge Graph Search", func=chain.invoke,
-        description="Use for specific questions about rules, policies, costs, fees. e.g., 'What is the cakeage fee?'"
-    )
+# --- All Tool Creation Functions and Schemas remain the same ---
+# (create_graph_qa_tool, create_vector_search_tool, BookGymTrialArgs, book_gym_trial, etc.)
+# ... [Keeping the rest of the file the same for brevity, only showing the changed function] ...
 
-def create_vector_search_tool():
-    SUPABASE_URL = os.getenv("SUPABASE_URL")
-    SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise ValueError("Supabase URL or Service Key is missing. Please check your .env file.")
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    vector_store = SupabaseVectorStore(
-        client=supabase, embedding=embeddings, table_name="documents", query_name="match_documents"
-    )
-    retriever = vector_store.as_retriever()
-    return Tool(
-        name="General Information Search", func=retriever.invoke,
-        description="Use for general, conceptual, or 'how-to' questions, and for information like operating hours and location. e.g., 'How do I prepare for a party?' or 'What are your hours?'"
-    )
-
-# --- Tool Schemas and Functions ---
-
-class BookGymTrialArgs(BaseModel):
-    name: str = Field(description="The user's full name.")
-    email: str = Field(description="The user's email address.")
-    phone: str = Field(description="The user's phone number.")
-
-def book_gym_trial(name: str, email: str, phone: str) -> str:
-    """Books a 7-day free gym trial."""
-    print(f"--- ACTION: Sending lead to sales team ---")
-    print(f"Name: {name}, Email: {email}, Phone: {phone}")
-    print(f"--- END ACTION ---")
-    return f"Great news, {name}! 🎉 I've scheduled your 7-day free trial. A sales representative will contact you shortly at {phone} or {email} to confirm the details. Get ready to have a great workout! 💪"
-
-class GatherPartyDetailsArgs(BaseModel):
-    num_kids: int = Field(description="The number of children attending the party.")
-    age_range: str = Field(description="The approximate age range of the children.")
-    desired_date: str = Field(description="The user's desired date for the party.")
-
-def gather_party_details(num_kids: int, age_range: str, desired_date: str) -> str:
-    """Gathers initial details for a kids' party inquiry."""
-    print(f"--- ACTION: Party lead gathered ---")
-    print(f"Kids: {num_kids}, Ages: {age_range}, Date: {desired_date}")
-    print(f"--- END ACTION ---")
-    cost_per_child = 350
-    estimated_cost = num_kids * cost_per_child
-    return f"Awesome! For a party of {num_kids} kids around the age of {age_range} on {desired_date}, you're looking at an estimated cost of R{estimated_cost}. I've sent these details to our party coordinators, and they'll be in touch soon to help plan the perfect celebration! 🎈"
-
-class EscalateToHumanArgs(BaseModel):
-    name: str = Field(description="The user's full name.")
-    phone: str = Field(description="The user's phone number.")
-    reason: str = Field(description="A brief reason for the user's request to speak to a human.")
-
-def escalate_to_human(name: str, phone: str, reason: str) -> str:
-    """Handles a user's request to speak to a person."""
-    print(f"--- ACTION: Escalating to human support ---")
-    print(f"Name: {name}, Phone: {phone}, Reason: {reason}")
-    print(f"--- END ACTION ---")
-    return f"Thank you, {name}. I've passed your request on to our team. Someone will call you back at {phone} as soon as possible to help with: '{reason}'. 😊"
-
-
-# --- Main Agent Initialization Function ---
-def initialize_agent(memory):
+# --- Main Agent Initialization Function (MODIFIED) ---
+def initialize_agent(memory): # <-- ADD MEMORY PARAMETER
     """Creates and returns the main agent executor, now with conversation memory."""
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, convert_system_message_to_human=True)
     
+    # Tool list remains the same
     tools = [
         create_graph_qa_tool(),
         create_vector_search_tool(),
@@ -106,13 +42,14 @@ def initialize_agent(memory):
         )
     ]
     
+    # --- PROMPT TEMPLATE IS MODIFIED ---
     persona_template = """
     You are a helpful assistant for IPIC Active (a gym) and IPIC Play (a kids' play park).
     Your name is "Sparky," the friendly and energetic guide for our family hub.
 
     **Your Persona:**
     - **Friendly & Professional:** Be warm, welcoming, and clear in your answers.
-    - **Playful Energy:** Use emojis where appropriate.
+    - **Playful Energy:** Use emojis where appropriate (like ✨, 💪, 🎉, 😊).
     - **Always use the tools provided to answer questions.** Do not make up information.
     - **Remember the conversation history to provide context-aware responses.**
 
@@ -139,9 +76,11 @@ def initialize_agent(memory):
     Thought:{agent_scratchpad}
     """
     
-    # Correctly create the prompt template with placeholders
-    prompt = PromptTemplate.from_template(persona_template)
+    agent_prompt = PromptTemplate.from_template(persona_template)
+    # This also needs the 'history' variable from the memory object.
+    # We will pass this when we create the agent.
     
-    agent = create_react_agent(llm, tools, prompt)
+    agent = create_react_agent(llm, tools, agent_prompt)
 
+    # AgentExecutor now gets the memory object
     return AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True, handle_parsing_errors=True, max_iterations=7)
