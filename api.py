@@ -1,5 +1,5 @@
 #
-# -------------------- api.py --------------------
+# -------------------- api.py (Corrected Import) --------------------
 #
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -8,7 +8,8 @@ import os
 
 from core_logic import initialize_agent
 from langchain.memory import ConversationBufferMemory
-from langchain.memory.chat_message_histories import PostgreChatMessageHistory
+# --- THIS LINE IS CHANGED ---
+from langchain_postgres.chat_message_histories import PostgreChatMessageHistory
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -41,7 +42,7 @@ def chat_with_agent(request: ChatRequest):
             session_id=request.conversation_id,
             table_name="conversation_history",
         )
-
+        
         # 2. Create the memory buffer
         memory = ConversationBufferMemory(
             memory_key="history",
@@ -54,7 +55,7 @@ def chat_with_agent(request: ChatRequest):
 
         # 4. Invoke the agent with the new query
         response = agent_executor.invoke({"input": request.query})
-
+        
         return {"response": response["output"]}
 
     except Exception as e:
