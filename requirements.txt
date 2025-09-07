@@ -8,3 +8,5 @@ python-dotenv
 tiktoken
 faiss-cpu==1.10.0
 supabase
+fastapi
+uvicorn[standard]
