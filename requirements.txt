@@ -9,3 +9,4 @@ tiktoken
 supabase
 fastapi
 uvicorn[standard]
+langchain-text-splitters
