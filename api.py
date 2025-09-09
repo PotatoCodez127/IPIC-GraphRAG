@@ -115,7 +115,6 @@ base_agent = create_react_agent(llm, tools, prompt)
 print("✅ AI components pre-loaded successfully!")
 # --- End Pre-loading Section ---
 
-
 # --- Custom Supabase Chat History Class (Unchanged) ---
 class SupabaseChatMessageHistory(BaseChatMessageHistory):
     def __init__(self, session_id: str, table_name: str):
