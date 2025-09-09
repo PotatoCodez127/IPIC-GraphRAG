@@ -1,15 +1,14 @@
 #
-# -------------------- api.py (Optimized & Concurrency-Safe) --------------------
+# -------------------- api.py (Optimized, Secure & Concurrency-Safe) --------------------
 #
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header, status
 from pydantic import BaseModel
 from supabase.client import Client, create_client
 import os
 import json
-import asyncio # Import the asyncio library
+import asyncio
 
 # --- Core Logic Imports for Pre-loading ---
-# We import the building blocks directly from core_logic
 from core_logic import (
     create_graph_qa_tool,
     create_vector_search_tool,
@@ -34,12 +33,28 @@ from langchain.schema.messages import BaseMessage, messages_from_dict, messages_
 app = FastAPI(
     title="Sparky AI Agent API",
     description="An API to interact with the Sparky AI agent for IPIC.",
-    version="1.2.0" # Version bump for concurrency control
+    version="1.3.0" # Version bump for security
 )
 
+# --- API Security ---
+API_SECRET_KEY = os.getenv("API_SECRET_KEY")
+
+async def verify_api_key(x_api_key: str = Header()):
+    """Dependency to verify the API key in the request header."""
+    if not API_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="API Secret Key not configured on the server."
+        )
+    if x_api_key != API_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API Key."
+        )
+# --- End API Security ---
+
+
 # --- Create a semaphore to limit concurrent agent executions ---
-# This allows only N coroutines to enter the critical section at a time.
-# We'll set the limit to 2, which is a safe number for most API rate limits.
 CONCURRENCY_LIMIT = 2
 agent_semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
 
@@ -52,10 +67,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 # --- Pre-load Heavy Components on Application Startup ---
 print("Pre-loading AI components...")
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, convert_system_message_to_human=True)
-
-tools = [
-    create_graph_qa_tool(),
-    create_vector_search_tool(),
+tools = [create_graph_qa_tool(), create_vector_search_tool(), # ... (rest of tools are the same)
     StructuredTool.from_function(
         name="Book 7-Day Gym Trial", func=book_gym_trial, args_schema=BookGymTrialArgs,
         description="Use this when a user wants to book, schedule, or start a 7-day free trial for the IPIC Active gym. You must ask for their full name, email, and phone number first before using this tool."
@@ -69,24 +81,18 @@ tools = [
         description="Use this tool when the user explicitly asks to speak to a person, staff member, or human. You must ask for their name, phone number, and a brief reason for their request first."
     )
 ]
-
-# The persona template is defined here for pre-loading
 persona_template = """
 You are a helpful assistant for IPIC Active (a gym) and IPIC Play (a kids' play park).
 Your name is "Sparky," the friendly and energetic guide for our family hub.
-
 **Your Persona:**
 - **Friendly & Professional:** Be warm, welcoming, and clear in your answers.
 - **Playful Energy:** Use emojis where appropriate.
 - **Tool Usage:** Your primary purpose is to use the provided tools to answer user questions. Do not make up information.
 - **Handling Non-Questions:** If the user's input is not a clear question or command (e.g., they just say "ok", "thanks", or send a greeting again), you do not need to use a tool. In this case, your thought process should conclude that you can answer directly.
 - **Conversation Flow:** Remember the conversation history. Only greet the user once.
-
 **You have access to the following tools:**
 {tools}
-
 **Use the following format:**
-
 Question: the input question you must answer
 Thought: You must think about what to do. I need to analyze the user's 'New question' and the 'Previous conversation history'.
 1. Is this a clear question that one of my tools can answer? If yes, I will choose the best tool from [{tool_names}] and prepare the Action Input.
@@ -98,12 +104,9 @@ Observation: The result of the action.
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now have enough information to answer the user in my Sparky persona.
 Final Answer: Your final, customer-facing answer.
-
 Begin!
-
 Previous conversation history:
 {history}
-
 New question: {input}
 Thought:{agent_scratchpad}
 """
@@ -137,19 +140,15 @@ class ChatRequest(BaseModel):
     conversation_id: str
     query: str
 
-@app.post("/chat")
+@app.post("/chat", dependencies=[Depends(verify_api_key)])
 async def chat_with_agent(request: ChatRequest):
     """
     Main endpoint to chat with the agent.
-    This endpoint now uses a semaphore to limit concurrent executions
-    and prevent rate-limiting errors.
+    This endpoint is now SECURED with an API key.
     """
     async with agent_semaphore:
-        # The code inside this block will only be executed by CONCURRENCY_LIMIT (2)
-        # requests at a time. Other incoming requests will wait here until a spot opens up.
         print(f"Semaphore acquired by conversation_id: {request.conversation_id}")
         try:
-            # 1. Create conversation-specific memory for this request
             message_history = SupabaseChatMessageHistory(
                 session_id=request.conversation_id,
                 table_name="conversation_history"
@@ -159,8 +158,6 @@ async def chat_with_agent(request: ChatRequest):
                 chat_memory=message_history,
                 return_messages=True
             )
-
-            # 2. Create a new AgentExecutor for this request
             agent_executor = AgentExecutor(
                 agent=base_agent,
                 tools=tools,
@@ -169,8 +166,6 @@ async def chat_with_agent(request: ChatRequest):
                 handle_parsing_errors=True,
                 max_iterations=7
             )
-
-            # 3. Invoke the agent asynchronously (this is the resource-intensive part)
             response = await agent_executor.ainvoke({"input": request.query})
             
             print(f"Semaphore released by conversation_id: {request.conversation_id}")
