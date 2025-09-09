@@ -22,6 +22,7 @@ def create_graph_qa_tool():
         ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0),
         graph=graph, verbose=False, allow_dangerous_requests=True
     )
+
     return Tool(
         name="Knowledge Graph Search", func=chain.invoke,
         description="Use for specific questions about rules, policies, costs, fees. e.g., 'What is the cakeage fee?'"
@@ -37,6 +38,7 @@ def create_vector_search_tool():
     vector_store = SupabaseVectorStore(
         client=supabase, embedding=embeddings, table_name="documents", query_name="match_documents"
     )
+
     retriever = vector_store.as_retriever()
     return Tool(
         name="General Information Search", func=retriever.invoke,

@@ -81,6 +81,7 @@ tools = [create_graph_qa_tool(), create_vector_search_tool(), # ... (rest of too
         description="Use this tool when the user explicitly asks to speak to a person, staff member, or human. You must ask for their name, phone number, and a brief reason for their request first."
     )
 ]
+
 persona_template = """
 You are a helpful assistant for IPIC Active (a gym) and IPIC Play (a kids' play park).
 Your name is "Sparky," the friendly and energetic guide for our family hub.
@@ -110,6 +111,7 @@ Previous conversation history:
 New question: {input}
 Thought:{agent_scratchpad}
 """
+
 prompt = PromptTemplate.from_template(persona_template)
 base_agent = create_react_agent(llm, tools, prompt)
 print("✅ AI components pre-loaded successfully!")
