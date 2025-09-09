@@ -55,7 +55,7 @@ def book_gym_trial(name: str, email: str, phone: str) -> str:
     print(f"--- ACTION: Sending lead to sales team ---")
     print(f"Name: {name}, Email: {email}, Phone: {phone}")
     print(f"--- END ACTION ---")
-    return f"Great news, {name}! 🎉 I've scheduled your 7-day free trial. A sales representative will contact you shortly at {phone} or {email} to confirm the details. Get ready to have a great workout! 💪"
+    return f"Great news, {name}! I've scheduled your 7-day free trial. A sales representative will contact you shortly at {phone} or {email} to confirm the details. Get ready to have a great workout! 潮"
 
 class GatherPartyDetailsArgs(BaseModel):
     num_kids: int = Field(description="The number of children attending the party.")
@@ -69,7 +69,7 @@ def gather_party_details(num_kids: int, age_range: str, desired_date: str) -> st
     print(f"--- END ACTION ---")
     cost_per_child = 350
     estimated_cost = num_kids * cost_per_child
-    return f"Awesome! For a party of {num_kids} kids around the age of {age_range} on {desired_date}, you're looking at an estimated cost of R{estimated_cost}. I've sent these details to our party coordinators, and they'll be in touch soon to help plan the perfect celebration! 🎈"
+    return f"Awesome! For a party of {num_kids} kids around the age of {age_range} on {desired_date}, you're looking at an estimated cost of R{estimated_cost}. I've sent these details to our party coordinators, and they'll be in touch soon to help plan the perfect celebration! 肢"
 
 class EscalateToHumanArgs(BaseModel):
     name: str = Field(description="The user's full name.")
@@ -81,7 +81,7 @@ def escalate_to_human(name: str, phone: str, reason: str) -> str:
     print(f"--- ACTION: Escalating to human support ---")
     print(f"Name: {name}, Phone: {phone}, Reason: {reason}")
     print(f"--- END ACTION ---")
-    return f"Thank you, {name}. I've passed your request on to our team. Someone will call you back at {phone} as soon as possible to help with: '{reason}'. 😊"
+    return f"Thank you, {name}. I've passed your request on to our team. Someone will call you back at {phone} as soon as possible to help with: '{reason}'. "
 
 
 # --- Main Agent Initialization Function ---
@@ -105,7 +105,7 @@ def initialize_agent(memory):
             description="Use this tool when the user explicitly asks to speak to a person, staff member, or human. You must ask for their name, phone number, and a brief reason for their request first."
         )
     ]
-    
+
     persona_template = """
     You are a helpful assistant for IPIC Active (a gym) and IPIC Play (a kids' play park).
     Your name is "Sparky," the friendly and energetic guide for our family hub.
@@ -115,7 +115,7 @@ def initialize_agent(memory):
     - **Playful Energy:** Use emojis where appropriate.
     - **Always use the tools provided to answer questions.** Do not make up information.
     - **Remember the conversation history to provide context-aware responses.**
-    - **Only greet the user once per conversation.**
+    - **Only greet the user once per conversation.** If the user sends a greeting like "hi" or "hello" after the initial one, ask them how you can help them today.
 
     **You have access to the following tools:**
     {tools}
@@ -123,7 +123,7 @@ def initialize_agent(memory):
     **Use the following format:**
 
     Question: the input question you must answer
-    Thought: You must think about what to do, considering the conversation history. Your goal is to answer the user's question or guide them to the next step. Choose the best tool from [{tool_names}].
+    Thought: You must think about what to do, considering the conversation history. Your goal is to answer the user's question or guide them to the next step. Choose the best tool from [{tool_names}]. If the user just says hi, ask how you can help.
     Action: the action to take, should be one of the tool names [{tool_names}].
     Action Input: the input to the action. This should be a JSON object that strictly adheres to the tool's argument schema.
     Observation: the result of the action.
@@ -139,10 +139,10 @@ def initialize_agent(memory):
     New question: {input}
     Thought:{agent_scratchpad}
     """
-    
+
     # Correctly create the prompt template with placeholders
     prompt = PromptTemplate.from_template(persona_template)
-    
+
     agent = create_react_agent(llm, tools, prompt)
 
     return AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True, handle_parsing_errors=True, max_iterations=7)
