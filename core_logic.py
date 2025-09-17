@@ -11,7 +11,6 @@ from langchain_neo4j import GraphCypherQAChain, Neo4jGraph
 from langchain.prompts import PromptTemplate
 from supabase.client import Client, create_client
 from pydantic import BaseModel, Field
-from langchain.memory import ConversationBufferMemory
 
 load_dotenv()
 
@@ -87,27 +86,9 @@ def escalate_to_human(name: str, phone: str, reason: str) -> str:
 
 
 # --- Main Agent Initialization Function ---
-def initialize_agent(memory):
-    """Creates and returns the main agent executor, now with conversation memory."""
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, convert_system_message_to_human=True)
+def initialize_agent(llm, tools):
+    """Creates and returns the main agent executor."""
     
-    tools = [
-        create_graph_qa_tool(),
-        create_vector_search_tool(),
-        StructuredTool.from_function(
-            name="Book 7-Day Gym Trial", func=book_gym_trial, args_schema=BookGymTrialArgs,
-            description="Use this when a user wants to book, schedule, or start a 7-day free trial for the IPIC Active gym. You must ask for their full name, email, and phone number first before using this tool."
-        ),
-        StructuredTool.from_function(
-            name="Gather Party Inquiry Details", func=gather_party_details, args_schema=GatherPartyDetailsArgs,
-            description="Use this tool when a user wants to inquire about booking a kids' party and needs a price estimate. You must ask for the number of kids, their age range, and the desired date first."
-        ),
-        StructuredTool.from_function(
-            name="Escalate to a Human", func=escalate_to_human, args_schema=EscalateToHumanArgs,
-            description="Use this tool when the user explicitly asks to speak to a person, staff member, or human. You must ask for their name, phone number, and a brief reason for their request first."
-        )
-    ]
-
     # Updated persona_template
     persona_template = """
     You are "Sparky," a friendly and energetic AI assistant for IPIC Active (a gym) and IPIC Play (a kids' play park).
@@ -121,9 +102,6 @@ def initialize_agent(memory):
 
     Question: the input question you must answer
     Thought: You must think about what to do.
-    - If the user asks a clear question that a tool can answer, choose the best tool from [{tool_names}], then state the Action and Action Input.
-    - **IMPORTANT**: If the user's input is a simple greeting (like "hi", "hello"), a thank you, or a conversational filler (like "ok", "thanks"), you MUST NOT use a tool. Your thought must be "The user is making conversation, I will respond directly." and then you MUST immediately provide a friendly response in the "Final Answer".
-    - If the user asks a question that is outside the scope of the available tools (e.g., "What's the weather like?", "Can you tell me a joke?"), you MUST NOT use a tool. Your thought must be "This question is outside of my knowledge base, I will inform the user." and then you MUST immediately provide a helpful response in the "Final Answer" explaining that you can only answer questions about IPIC.
     Action: The action to take, should be one of [{tool_names}]
     Action Input: The input to the action.
     Observation: The result of the action.
@@ -144,4 +122,4 @@ def initialize_agent(memory):
 
     agent = create_react_agent(llm, tools, prompt)
 
-    return AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True, handle_parsing_errors="Check your output and make sure it conforms!", max_iterations=7)
+    return AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True, max_iterations=7)

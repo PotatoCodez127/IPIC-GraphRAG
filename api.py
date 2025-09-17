@@ -10,6 +10,7 @@ import asyncio
 
 # --- Core Logic Imports for Pre-loading ---
 from core_logic import (
+    initialize_agent,
     create_graph_qa_tool,
     create_vector_search_tool,
     book_gym_trial,
@@ -33,7 +34,7 @@ from langchain.schema.messages import BaseMessage, messages_from_dict, messages_
 app = FastAPI(
     title="Sparky AI Agent API",
     description="An API to interact with the Sparky AI agent for IPIC.",
-    version="1.3.3" # Version bump for out-of-scope handling
+    version="1.4.0" # Version bump for routing logic
 )
 
 # --- API Security ---
@@ -82,43 +83,24 @@ tools = [create_graph_qa_tool(), create_vector_search_tool(), # ... (rest of too
     )
 ]
 
-# Updated persona_template
-persona_template = """
-You are "Sparky," a friendly and energetic AI assistant for IPIC Active (a gym) and IPIC Play (a kids' play park).
-Your primary purpose is to use the provided tools to answer user questions. Do not make up information.
-Remember the conversation history. Only greet the user once. Use emojis where appropriate.
-
-**You have access to the following tools:**
-{tools}
-
-**Use the following format:**
-
-Question: the input question you must answer
-Thought: You must think about what to do.
-- If the user asks a clear question that a tool can answer, choose the best tool from [{tool_names}], then state the Action and Action Input.
-- **IMPORTANT**: If the user's input is a simple greeting (like "hi", "hello"), a thank you, or a conversational filler (like "ok", "thanks"), you MUST NOT use a tool. Your thought must be "The user is making conversation, I will respond directly." and then you MUST immediately provide a friendly response in the "Final Answer".
-- If the user asks a question that is outside the scope of the available tools (e.g., "What's the weather like?", "Can you tell me a joke?"), you MUST NOT use a tool. Your thought must be "This question is outside of my knowledge base, I will inform the user." and then you MUST immediately provide a helpful response in the "Final Answer" explaining that you can only answer questions about IPIC.
-Action: The action to take, should be one of [{tool_names}]
-Action Input: The input to the action.
-Observation: The result of the action.
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now have enough information to answer the user in my Sparky persona.
-Final Answer: Your final, customer-facing answer.
-
-Begin!
-
-Previous conversation history:
-{history}
-
-New question: {input}
-Thought:{agent_scratchpad}
-"""
-
-
-prompt = PromptTemplate.from_template(persona_template)
-base_agent = create_react_agent(llm, tools, prompt)
+agent_executor = initialize_agent(llm, tools)
 print("✅ AI components pre-loaded successfully!")
 # --- End Pre-loading Section ---
+
+# --- Intent Classification ---
+async def classify_intent(query: str) -> str:
+    """Classifies the user's intent."""
+    prompt = f"""
+    Please classify the user's intent into one of the following categories:
+    - "GREETING" (e.g., "hi", "hello")
+    - "THANKS" (e.g., "thanks", "thank you")
+    - "OUT_OF_SCOPE" (e.g., "what's the weather like?", "tell me a joke")
+    - "TOOL_REQUIRED" (e.g., "what are your hours?", "how do I book a party?")
+
+    User query: "{query}"
+    """
+    response = await llm.ainvoke(prompt)
+    return response.content.strip()
 
 # --- Custom Supabase Chat History Class (Unchanged) ---
 class SupabaseChatMessageHistory(BaseChatMessageHistory):
@@ -153,27 +135,29 @@ async def chat_with_agent(request: ChatRequest):
     async with agent_semaphore:
         print(f"Semaphore acquired by conversation_id: {request.conversation_id}")
         try:
-            message_history = SupabaseChatMessageHistory(
-                session_id=request.conversation_id,
-                table_name="conversation_history"
-            )
-            memory = ConversationBufferMemory(
-                memory_key="history",
-                chat_memory=message_history,
-                return_messages=True
-            )
-            agent_executor = AgentExecutor(
-                agent=base_agent,
-                tools=tools,
-                memory=memory,
-                verbose=True,
-                handle_parsing_errors="Check your output and make sure it conforms!",
-                max_iterations=7
-            )
-            response = await agent_executor.ainvoke({"input": request.query})
-            
-            print(f"Semaphore released by conversation_id: {request.conversation_id}")
-            return {"response": response["output"]}
+            intent = await classify_intent(request.query)
+
+            if intent == "GREETING":
+                return {"response": "Hi there! I'm Sparky, your friendly guide to all things IPIC. How can I help you today? ✨"}
+            elif intent == "THANKS":
+                return {"response": "You're welcome! If you need anything else, just ask. 😊"}
+            elif intent == "OUT_OF_SCOPE":
+                return {"response": "I'm sorry, I can only answer questions about IPIC. If you'd like to speak to a human, just let me know! 🤖"}
+            else:
+                message_history = SupabaseChatMessageHistory(
+                    session_id=request.conversation_id,
+                    table_name="conversation_history"
+                )
+                memory = ConversationBufferMemory(
+                    memory_key="history",
+                    chat_memory=message_history,
+                    return_messages=True
+                )
+                agent_executor.memory = memory
+                response = await agent_executor.ainvoke({"input": request.query})
+                
+                print(f"Semaphore released by conversation_id: {request.conversation_id}")
+                return {"response": response["output"]}
 
         except Exception as e:
             print(f"An error occurred in /chat for conversation_id {request.conversation_id}: {e}")
