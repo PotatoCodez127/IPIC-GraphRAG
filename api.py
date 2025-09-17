@@ -33,7 +33,7 @@ from langchain.schema.messages import BaseMessage, messages_from_dict, messages_
 app = FastAPI(
     title="Sparky AI Agent API",
     description="An API to interact with the Sparky AI agent for IPIC.",
-    version="1.3.2" # Version bump for new prompt
+    version="1.3.3" # Version bump for out-of-scope handling
 )
 
 # --- API Security ---
@@ -97,6 +97,7 @@ Question: the input question you must answer
 Thought: You must think about what to do.
 - If the user asks a clear question that a tool can answer, choose the best tool from [{tool_names}], then state the Action and Action Input.
 - **IMPORTANT**: If the user's input is a simple greeting (like "hi", "hello"), a thank you, or a conversational filler (like "ok", "thanks"), you MUST NOT use a tool. Your thought must be "The user is making conversation, I will respond directly." and then you MUST immediately provide a friendly response in the "Final Answer".
+- If the user asks a question that is outside the scope of the available tools (e.g., "What's the weather like?", "Can you tell me a joke?"), you MUST NOT use a tool. Your thought must be "This question is outside of my knowledge base, I will inform the user." and then you MUST immediately provide a helpful response in the "Final Answer" explaining that you can only answer questions about IPIC.
 Action: The action to take, should be one of [{tool_names}]
 Action Input: The input to the action.
 Observation: The result of the action.
